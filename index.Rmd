@@ -1,0 +1,151 @@
+---
+title: "ESA Listings"
+output:
+  flexdashboard::flex_dashboard:
+    css: custom.css
+    social: menu
+    df_print: paged
+    navbar:
+    - {title: "", icon: "fa-question-circle fa-lg", align: right, href: "mailto:esa@defenders.org?subject=listings summary"}
+    - {title: "", icon: "fa-github fa-lg", align: right, href: "https://github.com/jacob-ogre/listings_summary/"}
+    - {title: "CCI", align: right, href: "https://cci-dev.org"}
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(DT)
+library(ESAListings)
+library(highcharter)
+library(leaflet)
+library(plotly)
+library(shinyBS)
+library(shinydashboard)
+library(treemap)
+library(viridis)
+
+load("data/county_topo.rda")
+load("data/esacounties.rda")
+load("data/TECP_data.rda")
+load("data/TECP_domestic.rda")
+load("data/county_attrib.rda")
+
+counties <- readRDS("data/counties_df.rds")
+
+# a palette of c("yellow","red","black","green","purple","orange")
+list_pal <- rev(substr(viridis(4), 1, 7)) 
+  
+```
+
+```{r en_th_can_prop, echo=FALSE}
+# This needs to run each app start-up because the TECP data should scrape nightly
+num_es <- nrow(filter(TECP_domestic, Federal_Listing_Status == "Endangered"))
+num_th <- nrow(filter(TECP_domestic, Federal_Listing_Status == "Threatened"))
+num_pr <- nrow(
+  filter(
+    TECP_domestic,
+    startsWith(Federal_Listing_Status, "Proposed")
+  )
+)
+num_cn <- nrow(filter(TECP_domestic, Federal_Listing_Status == "Candidate"))
+
+##############################################################################
+# create 'years' dataframe
+years <- mutate(TECP_date, Year = substr(First_Listed, 9, 12)) %>%
+  select(Year, Federal_Listing_Status) %>%
+  filter(Federal_Listing_Status == "Endangered" |
+         Federal_Listing_Status == "Threatened")
+
+years$Status <- sapply(years$Federal_Listing_Status,
+                       function(x) if (x == "Proposed Endangered" |
+                                       x == "Proposed Threatened") {
+                         "Proposed" } else { x } )
+
+years <- group_by(years, Year, Status) %>%
+  summarise(count = n())
+
+years$Year <- as.integer(years$Year)
+
+impute <- data.frame(Year = rep(seq(
+  min(years$Year, na.rm = TRUE),
+  max(years$Year, na.rm = TRUE), 1), 2),
+Status = rep(unique(years$Status),
+             each = max(years$Year, na.rm = TRUE) - 1966))
+
+years <- right_join(years, impute, by = c("Year", "Status"))
+years$count[is.na(years$count)] <- 0
+
+totals <- group_by(years, Year) %>%
+  arrange(Year) %>%
+  summarise(total = sum(count)) %>%
+  mutate(cumm = cumsum(total))
+```
+
+Overview
+=======================================================================
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+### By the numbers
+
+```{r numbers_summary, echo=FALSE}
+fluidRow(
+  valueBox(num_es, "Endangered Species", color = "yellow", width = 12),
+  valueBox(num_th, "Threatened Species", color = "purple", width = 12),
+  valueBox(num_cn, "Candidate Species", color = "green", width = 12),
+  valueBox(num_pr, "Proposed for Listing", color = "blue", width = 12)
+)
+```
+
+----
+
+<p style='font-size:0.9em'>Since 1973, over 2,000 species have been listed as 'Threatened' or 'Endangered' under the Endangered Species Act (ESA). The Fish and Wildlife Service (FWS) provides a detailed description of the listing process. Here you can explore the number of domestic listed species by year as of 06/16/2017.</p>
+
+Column {data-width=800}
+-----------------------------------------------------------------------
+
+### Domestic ESA listings through time
+
+
+```{r listings_time, echo=FALSE}
+renderPlotly({
+  plot_ly(ungroup(years), x = ~Year, y = ~count) %>%
+    add_trace(
+      type = "scatter", 
+      mode = "lines", 
+      color = ~Status, 
+      colors = list_pal, 
+      text = ~paste(count, "species listed as<br>", Status, "in", Year, sep = " "), 
+      hoverinfo = "text") %>%
+    add_trace(
+      data = totals, 
+      x = ~Year, 
+      y = ~total, 
+      text = ~paste(total,"Total species listed in", Year, sep = " "), 
+      hoverinfo = "text",
+      type = "scatter", 
+      mode = "lines", 
+      name = "Total", 
+      line = list(color = "grey")) %>%
+    add_trace(
+      data = totals, 
+      x = ~Year, 
+      y = ~cumm, 
+      text = ~paste(cumm, "species listed as of", Year, sep = " "), 
+      hoverinfo = "text",
+      type = "scatter", 
+      mode = "lines", 
+      name = "Cumulative<br>(click to show)", 
+      visible = "legendonly") %>%
+    layout(
+      hovermode = "closest", 
+      font = list(color = "black"),
+      xaxis = list(title = "Year"),
+      yaxis = list(title = "Number of Listings"),
+      legend = list(x = 0.05, y = 0.95, bordercolor = "black", borderwidth = 1))
+})
+```
+
