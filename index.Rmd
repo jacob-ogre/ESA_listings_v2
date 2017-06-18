@@ -47,7 +47,13 @@ stat_pal <- function(status) {
     Threatened = list_pal[4]
   )
 }
-  
+
+#define palette function for choropleth map
+palfx <- colorNumeric(
+  palette = c("midnightblue", "yellow"),
+  domain = c(0, 75),
+  na.color = "yellow"
+)
 ```
 
 ```{r en_th_can_prop, echo=FALSE}
@@ -222,7 +228,6 @@ Column {data-width=800}
 
 ### Domestic ESA listings through time
 
-
 ```{r listings_time, echo=FALSE}
 renderPlotly({
   plot_ly(ungroup(years), x = ~Year, y = ~count) %>%
@@ -262,7 +267,7 @@ renderPlotly({
 })
 ```
 
-Listing Summaries
+By Species Group and U.S. Region
 =======================================================================
 
 Column {.tabset}
@@ -535,3 +540,139 @@ fluidRow(
 ))
 
 ```
+
+U.S. Listings Map
+=======================================================================
+
+Column {data-width=750}
+-----------------------------------------------------------------------
+
+### 
+
+```{r listing_map}
+leafletOutput("map")
+
+output$map <- renderLeaflet({
+  leaflet() %>%
+    addTopoJSON(
+      county_topo,
+      weight = 0.5,
+      color = "black",
+      fillOpacity = 0.5) %>%
+    addProviderTiles("Stamen.TonerLite") %>%
+    setView(lng=-95, lat=38, zoom = 4)  %>%
+    mapOptions(zoomToLimits = "never") %>%
+    addLegend(
+      title = "Number of<br>Listed Species",
+      position = "bottomleft",
+      colors = palfx(seq(0, 80, 10)),
+      labels = c("- 0","- 10","- 20","- 30","- 40","- 50",
+                 "- 60","- 70","> 80")) %>%
+    addLegend(
+      title = "Click on the center of a county<br>to see the species listed there.",
+      position = "topright", colors = NULL, labels = NULL) %>%
+    addCircleMarkers(
+      data = counties,
+      lng = ~INTPTLON,
+      lat = ~INTPTLAT,
+      radius = 6,
+      color = "red",
+      fillOpacity = 0,
+      stroke = FALSE,
+      popup = ~paste0(NAME," County<br>", count, " species<br>")
+    )
+})
+
+# cur_zoom <- reactive({
+#   if (!is.null(input$map_zoom)) {
+#     input$map_zoom
+#   } else {
+#     4
+#   }
+# })
+
+observe({
+  if(!is.null(input$cnty_spp_cell_clicked$value)) {
+    print(1 / input$map_zoom)
+    spec_select <- filter(esacounties,
+                          Scientific == input$cnty_spp_cell_clicked$value) %>%
+                   select(GEOID)
+  
+    leafletProxy("map") %>%
+      clearShapes() %>%
+      clearMarkers() %>%
+      addCircles(
+        data = filter(counties, GEOID %in% spec_select$GEOID),
+        lng = ~INTPTLON,
+        lat = ~INTPTLAT,
+        radius = 32000 * (2 / input$map_zoom),
+        color = "black",
+        fillOpacity = 1,
+        stroke = FALSE) %>%
+      addCircleMarkers(
+        data = counties,
+        lng = ~INTPTLON,
+        lat = ~INTPTLAT,
+        radius = 6,
+        color = "red",
+        fillOpacity = 0,
+        stroke = FALSE,
+        popup = ~paste0(NAME," County<br>", count, " species<br>")
+      )
+  }
+})
+
+observeEvent(input$map_marker_click,{
+  click_lat <- input$map_marker_click[[3]]
+  click_lon <- input$map_marker_click[[4]]
+  gid <- counties$GEOID[counties$INTPTLAT == click_lat & 
+                          counties$INTPTLON == click_lon]
+  
+  output$cnty_spp <- DT::renderDataTable({
+    filter(esacounties, GEOID == gid) %>%
+    select(Scientific, Common) %>%
+    datatable(
+      rownames = FALSE, 
+      selection = "single", 
+      colnames = c("Species", "Common Name"), 
+      caption = "Click a species name to see its range displayed")
+  })
+})
+
+observeEvent(event_data("plotly_click", source = "sp_dist"), {
+  # print(event_data("plotly_click", source = "sp_dist"))
+  sp_count <- event_data("plotly_click", source = "sp_dist")$x[[1]]
+
+  output$rngTble <- DT::renderDataTable({
+    filter(ungroup(species), count == sp_count) %>%
+      inner_join(TECP_domestic, by = c("Scientific" = "Scientific_Name")) %>%
+      select(Scientific, Common_Name, count) %>%
+      datatable(rownames = FALSE,
+                selection = "none",
+                colnames = c("Species", "Common Name", "Counties"))
+  })
+})
+
+```
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+### 
+
+```{r spp_table, echo=FALSE}
+dataTableOutput("cnty_spp")
+```
+
+Range Sizes
+=======================================================================
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Content 1
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Content 2
