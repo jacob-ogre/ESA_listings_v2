@@ -222,7 +222,7 @@ fluidRow(
 
 ----
 
-<p style='font-size:0.9em'>Since 1973, over 2,000 species have been listed as 'Threatened' or 'Endangered' under the Endangered Species Act (ESA). The Fish and Wildlife Service (FWS) provides a detailed description of the listing process. Here you can explore the number of domestic listed species by year as of 06/16/2017.</p>
+<p style='font-size:0.92em'>Since 1973, over 2,000 species have been listed as 'Threatened' or 'Endangered' under the Endangered Species Act (ESA). The Fish and Wildlife Service (FWS) provides a detailed description of the listing process. Here you can explore the number of domestic listed species by year as of 06/16/2017.</p>
 
 Column {data-width=800}
 -----------------------------------------------------------------------
