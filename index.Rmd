@@ -136,8 +136,10 @@ totals <- group_by(years, Year) %>%
   summarise(total = sum(count)) %>%
   mutate(cumm = cumsum(total))
 
-######
-#
+#create species dataset
+species <- group_by(esacounties, Scientific) %>%
+  summarise(count = n()) %>%
+  arrange(count)
 
 #create initial treemaps
 dat1 <- group_by(regions, Lead_Region, Status) %>%
@@ -199,7 +201,6 @@ tx_combos <- data.frame(
   Status = rep(c("Endangered", "Proposed", "Threatened", "Candidate"), 11),
   stringsAsFactors = FALSE
 )
-
 ```
 
 Overview
@@ -267,7 +268,7 @@ renderPlotly({
 })
 ```
 
-By Species Group and U.S. Region
+By Group & Region
 =======================================================================
 
 Column {.tabset}
@@ -639,20 +640,6 @@ observeEvent(input$map_marker_click,{
   })
 })
 
-observeEvent(event_data("plotly_click", source = "sp_dist"), {
-  # print(event_data("plotly_click", source = "sp_dist"))
-  sp_count <- event_data("plotly_click", source = "sp_dist")$x[[1]]
-
-  output$rngTble <- DT::renderDataTable({
-    filter(ungroup(species), count == sp_count) %>%
-      inner_join(TECP_domestic, by = c("Scientific" = "Scientific_Name")) %>%
-      select(Scientific, Common_Name, count) %>%
-      datatable(rownames = FALSE,
-                selection = "none",
-                colnames = c("Species", "Common Name", "Counties"))
-  })
-})
-
 ```
 
 Column {data-width=250}
@@ -667,12 +654,113 @@ dataTableOutput("cnty_spp")
 Range Sizes
 =======================================================================
 
-Column {data-width=500}
+Column {data-width=750}
 -----------------------------------------------------------------------
 
-### Content 1
+### Counties per species and species per county
 
-Column {data-width=500}
+```{r}
+plotlyOutput("cumulants")
+
+output$cumulants <- renderPlotly({
+  #cumulative number of counties per species
+  co_spp <- plot_ly(
+    arrange(species, count), 
+    x = ~count, 
+    source = "sp_dist") %>%
+    add_lines(
+      y = ~round(row_number(count)/nrow(species), 3), 
+      name = "counties / spp.",
+      type = "scatter", 
+      mode = "lines",
+      text = ~paste(
+        round(row_number(count)/nrow(species), 3) * 100,
+        "% of species occur in", 
+        count, 
+        "or fewer counties"), 
+      hoverinfo = "text") %>%
+    add_histogram(
+      histnorm = "probability", 
+      name = "# counties", 
+      xbins = list(
+        start = 0.5, 
+        end = 3102.5, 
+        size = 1),
+      text = ~paste(
+        "% of counties contain", 
+        "listed species"),
+      hoverinfo = "none") %>%
+    layout(
+      xaxis = list(
+        title = "# Counties in Species' Range", 
+        type = "log", 
+        tickvals = c(0, 1, 5, 10, 50, 100, 500, 1000, 3000)),
+       yaxis = list(title = "Percentile of Species")
+    )
+
+  # cummulative number of species per county
+  spp_co <- plot_ly(
+      arrange(counties, count), 
+      x = ~count) %>%
+    add_lines(
+      y = ~round(row_number(count)/nrow(counties), 3), 
+      name = "spp. / county",
+      type = "scatter", 
+      mode = "lines",
+      text = ~paste(
+        round(row_number(count)/nrow(counties), 3) * 100, 
+        "% of counties contain", 
+        count, 
+        "or fewer species"),
+      hoverinfo = "text") %>%
+    add_histogram(
+      histnorm = "probability", 
+      name = "# spp.",
+      hoverinfo = "none") %>%
+    layout(
+      xaxis = list(
+        title = "# Species per County", 
+        type = "log", 
+        tickvals = c(0, 1, 5, 10, 50, 100, 1000)),
+      yaxis = list(title = "Percentile of Counties"),
+      margin = list(t = 10),
+      legend = list(x = 0.02, y = 0.98))
+  
+  subplot(
+    nrows = 2, 
+    # heights = c(0.5, 0.45),
+    margin = 0.05,
+    titleX = TRUE,
+    co_spp, 
+    spp_co)
+})
+
+```
+
+Column {data-width=250}
 -----------------------------------------------------------------------
 
-### Content 2
+### Distributions of Listed Species
+
+The distribution of ESA-listed species is very skewed toward small ranges (shown in terms of the number of U.S. counties of occurrence; top graph). 41% of species occur in one county, 55% occur in one or two counties, and 95% of species occur in less than 50 of the >3,000 counties in the U.S. 
+
+<br><br><br><br>
+
+Similarly, most counties have few ESA-listed species, although this distribution is less skewed than the sizes of species' ranges (bottom graph). From the data we see that 25% of counties are home to four or fewer ESA-listed species and 75% of counties are home to eight or fewer ESA-listed species.
+
+```{r echo=FALSE}
+# dataTableOutput("rngTble")
+# 
+# observeEvent(event_data("plotly_click", source = "sp_dist"), {
+#   sp_count <- event_data("plotly_click", source = "sp_dist")$x[[1]]
+# 
+#   output$rngTble <- DT::renderDataTable({
+#     filter(ungroup(species), count == sp_count) %>%
+#       inner_join(TECP_domestic, by = c("Scientific" = "Scientific_Name")) %>%
+#       select(Scientific, Common_Name, count) %>%
+#       datatable(rownames = FALSE,
+#                 selection = "none",
+#                 colnames = c("Species", "Common Name", "Counties"))
+#   })
+# })
+```
